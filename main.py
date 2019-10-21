@@ -37,26 +37,39 @@ pygame.mixer.init()
 
 user_report = " "
 #Some boolean values to control state
-START = True
+
+GREET = True
 ACTIVE = False #cabinet is conversing
 ALERT = False # dosage alert
 REPORT = False #save response
+TAKEN = False #med check
+
 class Medicine(object):
-    def __init__(self, name, dosage, hour, location):
+    def __init__(self, name, dosage, do, location):
         self.name = name
         self.dosage = dosage
-        self.hour = hour
+        self.hours = [hour1, hour2]
         self.location = location
-        self.taken = False
+       
         self.alert_msg = 'alert_msg.mp3'
         self.loc_msg = 'loc_msg.mp3'
-
+        self.remind1 ='remind1.mp3'
+        self.remind2 = 'remind2.mp3'
+        
+class Doses(object):
+    def __init__(self, hr1, hr2=Null):
+        self.hr1 = hr1
+        self.hr2 = hr2
+        self.taken1 = False
+        self.taken2 = False
+        
 def med_alert(med):
     currDT = datetime.datetime.now()
 
     if currDT.hour-med.hour == 0:
         play_audio(med.alert_msg)
         play_audio(med.loc_msg)
+        takemeds()
     else:
         play_audio(med.alert_msg)
         time_msg = " before " +str(med.hour) + " hundred hours."
@@ -66,8 +79,8 @@ def med_alert(med):
         play_audio(med.loc_msg)
     return
 #medical info
-med_1 = Medicine("Adderal", "2 pills", 23, " the center, of the top shelf in the cabinet, ") 
-med_list = {med_1}
+med_1 = Medicine("Heart medication", "2 pills", Doses(9, 17), " the center, of the top shelf in the cabinet, ") 
+med_list = [med_1]
 
 def play_audio(file_path):
     pygame.mixer.init()
@@ -75,18 +88,23 @@ def play_audio(file_path):
     pygame.mixer.music.play()
     while pygame.mixer.music.get_busy(): 
         pygame.time.Clock().tick(10)
-
+        
+def check_sched():
+    for med in med_list:
+        
+        
 
 def wake():
-    global ACTIVE, START 
+    global ACTIVE, GREET
     ACTIVE = True
     
-    if START:
+    if GREET:
         play_audio('greeting.mp3')
         check_meds()
-        START = False
-    else if ALERT == True:
+        GREET = False
+    elif ALERT == True:
         play_audio('takethem.mp3')
+        time.sleep(3)
         return
     else:
         play_audio('help.mp3')
@@ -103,13 +121,16 @@ def check_meds():
     
         for med in med_list:
             med_alert(med)
+    time.sleep(2)
     return
 
 def takemeds():
-    play_audio("finished.mp3")
+    play_audio("done.mp3")
+    time.sleep(2)
     
 def delaymeds():
     play_audio("delaymeds.mp3")
+    time.sleep(3)
 
 def get_update():
     global REPORT
@@ -243,32 +264,59 @@ def listen_print_loop(responses):
             # one of our keywords.
             num_chars_printed = 0
 
+def parse_audio(keyword, transcript):
+    return re.search(keyword, transcript, re.I)
+
 def decide_action(transcript):
-    if re.search('hello', transcript, re.I):
+    #begin interaction]
+    global ALERT, TAKEN
+    if parse_audio('hello', transcript):
         wake()
-    else if START == False and ALERT == True:
-        if re.search('yes', transcript, re.I):
+    #confirm meds
+    elif GREET == False and ALERT == True and TAKEN == False:
+        if parse_audio('yes', transcript):
             takemeds()
-        else if re.search('no', transcript, re.I):
+            
+            TAKEN = True
+        elif parse_audio('no', transcript):
             delaymeds()
+        elif parse_audio('done', transcript) or parse_audio('finished', transcript):
+            print("took med")
+            ALERT, TAKEN = False, False
+            get_update()
+            
         else:
             play_audio('confused.mp3')
+            time.sleep(3)
+            play_audio('takethem.mp3')
+    
+    elif re.search('feel',transcript, re.I):
+        get_update()
     else:
         return
 def main():
+#    t2s = gTTS('Shall I remind you to take them later?', lang='en-UK')
+#    t2s.save('delaymeds.mp3')
 
 
     
     #setting up the GTTS responses as .mp3 files!
-    t2s = gTTS('I didn't understand what you said.', lang ='en-UK', slow=False)
-    t2s.save('confused.mp3')
-    t2s = gTTS('Would you like to take your medication now?', lang ='en-UK', slow=False)
-    t2s.save('takethem.mp3')
-#    t2s = gTTS('Hello, User', lang ='en-UK', slow=False)
+#    t2s = gTTS('I did not understand what you just said.', lang ='en-UK', slow=False)
+#    t2s.save('confused.mp3')
+#    t2s = gTTS('Would you like to take your medication now?', lang ='en-UK', slow=False)
+#    t2s.save('takethem.mp3')
+    alert_msg = 'Please take ' + med_1.dosage + ' of your ' + med_1.name
+    t2s = gTTS(alert_msg,lang='en-UK')
+    t2s.save('alert_msg.mp3')
+    remind1 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr1) + " hundred hours."
+    t2s = gTTS(remind1, lang='en-uk')
+    t2s.save('remind1.mp3')
+    remind2 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr2) + " hundred hours."
+    t2s = gTTS(remind2, lang='en-uk')
+    t2s.save('remind2.mp3')
+#    t2s = gTTS('Hello, Grandpa Joe', lang ='en-UK', slow=False)
 #    t2s.save('greeting.mp3')
-#    alert_msg = 'Please take ' + med_1.dosage + ' of your ' + med_1.name
-#    t2s = gTTS(alert_msg,lang='en-UK')
-#    t2s.save('alert_msg.mp3')
+
 #    loc_msg = 'They are located on ' + med_1.location + '. They will be marked by the green LED lights.'
 #    t2s = gTTS(loc_msg, lang='en-UK')
 #    t2s.save('loc_msg.mp3')   
@@ -279,7 +327,7 @@ def main():
 #    t2s = gTTS('My records indicate that you have already taken your prescriptions for the day. Would you like to take an additional dose?', lang='en-UK')
 #    t2s.save('no_meds.mp3')
 #    t2s = gTTS('Great. How are you feeling?', lang='en-UK')
-#    t2s.save('feelings.mp3')
+#    t2s.save('inquiry.mp3')
 #    t2s = gTTS('Have you finished taking your medications?', lang='en-UK')
 #    t2s.save('finished.mp3')
 #    t2s = gTTS('Let me know when you are done.', lang='en-UK')
@@ -300,7 +348,7 @@ def main():
     #check out the simpler cases of asychronous recognition too!
     streaming_config = types.StreamingRecognitionConfig(
         config=config,
-        interim_results=True)
+        interim_results=False)
     
     #this section is where the action happens:
     #a microphone stream is set up, requests are generated based on
