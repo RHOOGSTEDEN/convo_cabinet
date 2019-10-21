@@ -17,12 +17,15 @@ import time
 from adafruit_crickit import crickit
 from adafruit_seesaw.neopixel import NeoPixel
 import datetime
-
-num_pixels = 75  # Number of pixels driven from Crickit NeoPixel terminal
+r = 0
+g = 0
+b = 150
+pulse_dir = 10
+num_pixels = 74  # Number of pixels driven from Crickit NeoPixel terminal
  
 # The following line sets up a NeoPixel strip on Seesaw pin 20 for Feather
 pixels = NeoPixel(crickit.seesaw, 20, num_pixels)
-
+pixels.fill(0)
 # Audio recording parameters, set for our USB mic.
 RATE = 48000 #if you change mics - be sure to change this :)
 CHUNK = int(RATE / 10)  # 100ms
@@ -37,18 +40,21 @@ pygame.mixer.init()
 
 user_report = " "
 #Some boolean values to control state
-
+DEMO = True
 GREET = True
 ACTIVE = False #cabinet is conversing
-ALERT = False # dosage alert
+ALERT = True # dosage alert
 REPORT = False #save response
 TAKEN = False #med check
 
 class Medicine(object):
-    def __init__(self, name, dosage, do, location):
+    def __init__(self, name,dosage, hr1, hr2,location):
         self.name = name
         self.dosage = dosage
-        self.hours = [hour1, hour2]
+        self.hr1 = hr1
+        self.hr2 = hr2
+        self.taken1 = False
+        self.taken2 = False
         self.location = location
        
         self.alert_msg = 'alert_msg.mp3'
@@ -57,7 +63,7 @@ class Medicine(object):
         self.remind2 = 'remind2.mp3'
         
 class Doses(object):
-    def __init__(self, hr1, hr2=Null):
+    def __init__(self, hr1, hr2):
         self.hr1 = hr1
         self.hr2 = hr2
         self.taken1 = False
@@ -66,20 +72,20 @@ class Doses(object):
 def med_alert(med):
     currDT = datetime.datetime.now()
 
-    if currDT.hour-med.hour == 0:
+    if currDT.hour-med.hr1 == 0 or currDT.hour-med.hr2 == 0:
         play_audio(med.alert_msg)
         play_audio(med.loc_msg)
-        takemeds()
+        take_meds()
     else:
         play_audio(med.alert_msg)
-        time_msg = " before " +str(med.hour) + " hundred hours."
+        time_msg = " before " +str(med.hr2) + " hundred hours."
         t2s = gTTS(time_msg, lang='en-uk')
         t2s.save('time_alert.mp3')
         play_audio('time_alert.mp3')
         play_audio(med.loc_msg)
     return
 #medical info
-med_1 = Medicine("Heart medication", "2 pills", Doses(9, 17), " the center, of the top shelf in the cabinet, ") 
+med_1 = Medicine("Heart medication", "2 pills", 9, 17, " the center, of the top shelf in the cabinet, ") 
 med_list = [med_1]
 
 def play_audio(file_path):
@@ -91,7 +97,7 @@ def play_audio(file_path):
         
 def check_sched():
     for med in med_list:
-        
+        return  
         
 
 def wake():
@@ -115,30 +121,54 @@ def check_meds():
     print("checking meds")
     currDT = datetime.datetime.now()
     for med in med_list:
-        if med.hour <= currDT.hour:
-            global ALERT 
-            ALERT = True
-    
-        for med in med_list:
-            med_alert(med)
+        if (med.hr1 <= currDT.hour and med.taken1 == False) or (med.hr2 <= currDT.hour and med.taken2 ==False):
+            play_audio('missed.mp3')
+            return
+        elif med.hr1 >= currDT.hour:
+            play_audio('remind1.mp3')
+            return
+        elif med.hr2>= currDT.hour:
+            play_audio('remind2.mp3')
+            return
+        else:
+            return
+        
     time.sleep(2)
     return
 
-def takemeds():
-    play_audio("done.mp3")
+def take_meds(med):
+    pixels[66] = (0,255,0)
+    time.sleep(.01)
+    pixels[65] = (0,255,0)
+    time.sleep(.01)
+    pixels[64] = (0, 255, 0)
+    time.sleep(.01)
+    pixels[63] = (0, 255, 0)
+    time.sleep(.01)
+    play_audio(med.alert_msg)
+    play_audio(med.loc_msg)
     time.sleep(2)
+    play_audio('done.mp3')
     
 def delaymeds():
     play_audio("delaymeds.mp3")
     time.sleep(3)
 
 def get_update():
-    global REPORT
-    REPORT = True
+    pixels[66] = (0,0,0)
+    time.sleep(.01)
+    pixels[65] = (0,0,0)
+    time.sleep(.01)
+    pixels[64] = (0,0,0)
+    time.sleep(.01)
+    pixels[63] = (0,0,0)
+    time.sleep(.01)
+    check_meds()
     play_audio('inquiry.mp3')
 
 
-
+def call_doc():
+    play_audio('calldoc.mp3')
 
 
 #MicrophoneStream() is brought in from Google Cloud Platform
@@ -263,41 +293,61 @@ def listen_print_loop(responses):
             # Exit recognition if any of the transcribed phrases could be
             # one of our keywords.
             num_chars_printed = 0
-
+def demo_mirror(color):
+    global r, g, b, pulse_dir
+    if (b+pulse_dir <= 0 or b+pulse_dir>=255):
+        pulse_dir *= -1
+    b = b + pulse_dir
+    i = 0
+    print("updating mirror")
+    while i < 37:
+        pixels[i] = color
+        i +=1
+        time.sleep(.005)
+    
+    
 def parse_audio(keyword, transcript):
     return re.search(keyword, transcript, re.I)
 
 def decide_action(transcript):
     #begin interaction]
-    global ALERT, TAKEN
-    if parse_audio('hello', transcript):
+    global ALERT, TAKEN, DEMO
+    if parse_audio('demo', transcript) and DEMO:
+        demo_mirror((0,0,128))
+        DEMO = False
+    elif parse_audio('alert', transcript) and ALERT:
+        demo_mirror((128,0,0))
+        ALERT=False
+    elif parse_audio('normal',transcript):
+        demo_mirror((128,128,128))
+    elif parse_audio('dim',transcript):
+        demo_mirror((64,64,64))
+    elif parse_audio('hello', transcript):
         wake()
+    elif parse_audio('can I take',transcript):
+        take_meds(med_1)
+        
     #confirm meds
-    elif GREET == False and ALERT == True and TAKEN == False:
-        if parse_audio('yes', transcript):
-            takemeds()
-            
-            TAKEN = True
-        elif parse_audio('no', transcript):
-            delaymeds()
-        elif parse_audio('done', transcript) or parse_audio('finished', transcript):
-            print("took med")
-            ALERT, TAKEN = False, False
-            get_update()
-            
-        else:
-            play_audio('confused.mp3')
-            time.sleep(3)
-            play_audio('takethem.mp3')
-    
-    elif re.search('feel',transcript, re.I):
+    elif parse_audio('finished',transcript):
+        med_1.taken1 = True
         get_update()
+    elif parse_audio('sick', transcript):
+        call_doc()
+    elif parse_audio('please call',transcript):
+        play_audio('calling.mp3')
+    
     else:
         return
 def main():
-#    t2s = gTTS('Shall I remind you to take them later?', lang='en-UK')
-#    t2s.save('delaymeds.mp3')
-
+#    if DEMO:
+#        demo_mirror()
+#    t2s = gTTS('It looks like you missed your last dosage of your heart medication at 9 A.M. Would you like to take it now?', lang='en-UK')
+#    t2s.save('missed.mp3')
+    t2s = gTTS('Would you like me to call your caregiver?', lang='en-UK')
+    t2s.save('calldoc.mp3')
+    t2s = gTTS('I am calling your caregiver now to let them know you are... feeling ill.', lang='en-UK')
+    t2s.save('calling.mp3')
+     
 
     
     #setting up the GTTS responses as .mp3 files!
@@ -305,16 +355,16 @@ def main():
 #    t2s.save('confused.mp3')
 #    t2s = gTTS('Would you like to take your medication now?', lang ='en-UK', slow=False)
 #    t2s.save('takethem.mp3')
-    alert_msg = 'Please take ' + med_1.dosage + ' of your ' + med_1.name
-    t2s = gTTS(alert_msg,lang='en-UK')
-    t2s.save('alert_msg.mp3')
-    remind1 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr1) + " hundred hours."
-    t2s = gTTS(remind1, lang='en-uk')
-    t2s.save('remind1.mp3')
-    remind2 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr2) + " hundred hours."
-    t2s = gTTS(remind2, lang='en-uk')
-    t2s.save('remind2.mp3')
-#    t2s = gTTS('Hello, Grandpa Joe', lang ='en-UK', slow=False)
+#    alert_msg = 'Please take ' + med_1.dosage + ' of your ' + med_1.name
+#    t2s = gTTS(alert_msg,lang='en-UK')
+#    t2s.save('alert_msg.mp3')
+#    remind1 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr1) + " hundred hours."
+#    t2s = gTTS(remind1, lang='en-uk')
+#    t2s.save('remind1.mp3')
+#    remind2 = "Remember to "+ alert_msg +" before " +str(med_1.doses.hr2) + " hundred hours."
+#    t2s = gTTS(remind2, lang='en-uk')
+#    t2s.save('remind2.mp3')
+##    t2s = gTTS('Hello, Grandpa Joe', lang ='en-UK', slow=False)
 #    t2s.save('greeting.mp3')
 
 #    loc_msg = 'They are located on ' + med_1.location + '. They will be marked by the green LED lights.'
@@ -364,7 +414,10 @@ def main():
 
         # Now, put the transcription responses to use.
         listen_print_loop(responses)
+        if DEMO:
+            demo_mirror()
         
+    
 
 
 if __name__ == '__main__':
