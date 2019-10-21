@@ -16,7 +16,8 @@ import os
 import time
 from adafruit_crickit import crickit
 from adafruit_seesaw.neopixel import NeoPixel
- 
+import datetime
+
 num_pixels = 75  # Number of pixels driven from Crickit NeoPixel terminal
  
 # The following line sets up a NeoPixel strip on Seesaw pin 20 for Feather
@@ -34,12 +35,39 @@ client = speech.SpeechClient()
 pygame.init()
 pygame.mixer.init()
 
+user_report = " "
 #Some boolean values to control state
+START = True
 ACTIVE = False #cabinet is conversing
 ALERT = False # dosage alert
 REPORT = False #save response
+class Medicine(object):
+    def __init__(self, name, dosage, hour, location):
+        self.name = name
+        self.dosage = dosage
+        self.hour = hour
+        self.location = location
+        self.taken = False
+        self.alert_msg = 'alert_msg.mp3'
+        self.loc_msg = 'loc_msg.mp3'
 
+def med_alert(med):
+    currDT = datetime.datetime.now()
 
+    if currDT.hour-med.hour == 0:
+        play_audio(med.alert_msg)
+        play_audio(med.loc_msg)
+    else:
+        play_audio(med.alert_msg)
+        time_msg = " before " +str(med.hour) + " hundred hours."
+        t2s = gTTS(time_msg, lang='en-uk')
+        t2s.save('time_alert.mp3')
+        play_audio('time_alert.mp3')
+        play_audio(med.loc_msg)
+    return
+#medical info
+med_1 = Medicine("Adderal", "2 pills", 23, " the center, of the top shelf in the cabinet, ") 
+med_list = {med_1}
 
 def play_audio(file_path):
     pygame.mixer.init()
@@ -50,45 +78,43 @@ def play_audio(file_path):
 
 
 def wake():
-    global ACTIVE 
+    global ACTIVE, START 
     ACTIVE = True
-    play_audio('greeting.mp3')
-    check_meds()
+    
+    if START:
+        play_audio('greeting.mp3')
+        check_meds()
+        START = False
+    else if ALERT == True:
+        play_audio('takethem.mp3')
+        return
+    else:
+        play_audio('help.mp3')
+        
 
 def check_meds():
+    global med_list
+    print("checking meds")
     currDT = datetime.datetime.now()
     for med in med_list:
         if med.hour <= currDT.hour:
             global ALERT 
             ALERT = True
-    if ALERT = True:
+    
         for med in med_list:
-            med.med_alert()
+            med_alert(med)
     return
 
+def takemeds():
+    play_audio("finished.mp3")
+    
+def delaymeds():
+    play_audio("delaymeds.mp3")
 
-class Medicine(object):
-    def __init__(self, name, dosage, hour, location)
-        self.name = name
-        self.dosage = dosage
-        self.hour = hour
-        self.location = location
-        self.taken = False
-
-        def med_alert():
-            currDT = datetime.datetime.now()
-            alert_msg = 'Take ' + self.dosage + ' of your ' + self.name 
-            loc_msg = 'They are locatated on ' + self.location + ' and are marked by the green LED lights.'
-            if currDT-self.hour == 0:
-                msg = alert_msg +'. '+ loc_msg
-            else:
-                msg = alert_msg + " before " +str(self.hour) + " O'clock" + loc_msg
-            t2s = gTTS(msg, lang='en-uk')
-            t2s.save('med_alert.mp3')
-            play_audio('med_alert.mp3') 
-            return
-
-
+def get_update():
+    global REPORT
+    REPORT = True
+    play_audio('inquiry.mp3')
 
 
 
@@ -220,33 +246,49 @@ def listen_print_loop(responses):
 def decide_action(transcript):
     if re.search('hello', transcript, re.I):
         wake()
+    else if START == False and ALERT == True:
+        if re.search('yes', transcript, re.I):
+            takemeds()
+        else if re.search('no', transcript, re.I):
+            delaymeds()
+        else:
+            play_audio('confused.mp3')
     else:
         return
 def main():
 
-    med_1 = Medicine("Adderal", "2 pills", 23, "center of the top shelf") 
-    med_list = {med_1}
+
     
     #setting up the GTTS responses as .mp3 files!
-    t2s = gTTS('Hello, Robby', lang ='en-UK')
-    t2s.save('greeting.mp3')
-    t2s = gTTS('Ok!', lang ='en-UK')
-    t2s.save('ok.mp3')
-    t2s = gTTS('"Ok, is there anything else I can help you with?"', lang='en-UK')
-    t2s.save('help.mp3')
-    t2s = gTTS('My records indicate that you have already taken your prescriptions for the day. Would you like to take an additional dose?', lang='en-UK')
-    t2s.save('no_meds.mp3')
-    t2s = gTTs('Great. How are you feeling?', lang='en-UK')
-    t2s.save('feelings.mp3')
-    t2s = gTTs('Have you finished taking your medications?', lang='en-UK')
-    t2s.save('finished.mp3')
-    t2s = gTTs('Let me know when you are done.', lang='en-UK')
-    t2s.save('done.mp3')
+    t2s = gTTS('I didn't understand what you said.', lang ='en-UK', slow=False)
+    t2s.save('confused.mp3')
+    t2s = gTTS('Would you like to take your medication now?', lang ='en-UK', slow=False)
+    t2s.save('takethem.mp3')
+#    t2s = gTTS('Hello, User', lang ='en-UK', slow=False)
+#    t2s.save('greeting.mp3')
+#    alert_msg = 'Please take ' + med_1.dosage + ' of your ' + med_1.name
+#    t2s = gTTS(alert_msg,lang='en-UK')
+#    t2s.save('alert_msg.mp3')
+#    loc_msg = 'They are located on ' + med_1.location + '. They will be marked by the green LED lights.'
+#    t2s = gTTS(loc_msg, lang='en-UK')
+#    t2s.save('loc_msg.mp3')   
+#    t2s = gTTS('Ok!', lang ='en-UK')
+#    t2s.save('ok.mp3')
+#    t2s = gTTS('Is there anything else I can help you with?', lang='en-UK')
+#    t2s.save('help.mp3')
+#    t2s = gTTS('My records indicate that you have already taken your prescriptions for the day. Would you like to take an additional dose?', lang='en-UK')
+#    t2s.save('no_meds.mp3')
+#    t2s = gTTS('Great. How are you feeling?', lang='en-UK')
+#    t2s.save('feelings.mp3')
+#    t2s = gTTS('Have you finished taking your medications?', lang='en-UK')
+#    t2s.save('finished.mp3')
+#    t2s = gTTS('Let me know when you are done.', lang='en-UK')
+#    t2s.save('done.mp3')
     # See http://g.co/cloud/speech/docs/languages
     # for a list of supported languages.
     # this code comes from Google Cloud's Speech to Text API!
     # Check out the links in your handout. Comments are ours.
-    language_code = 'en-UK'  # a BCP-47 language tag
+    language_code = 'en-US'  # a BCP-47 language tag
 
     #set up a client
     #make sure GCP is aware of the encoding, rate 
@@ -274,6 +316,7 @@ def main():
 
         # Now, put the transcription responses to use.
         listen_print_loop(responses)
+        
 
 
 if __name__ == '__main__':
