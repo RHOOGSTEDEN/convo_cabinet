@@ -1,4 +1,4 @@
-rom __future__ import division
+from __future__ import division
 
 import re
 import sys
@@ -17,22 +17,29 @@ import time
 from adafruit_crickit import crickit
 from adafruit_seesaw.neopixel import NeoPixel
  
-num_pixels = 10  # Number of pixels driven from Crickit NeoPixel terminal
+num_pixels = 75  # Number of pixels driven from Crickit NeoPixel terminal
  
 # The following line sets up a NeoPixel strip on Seesaw pin 20 for Feather
 pixels = NeoPixel(crickit.seesaw, 20, num_pixels)
 
 # Audio recording parameters, set for our USB mic.
-RATE = 44100 #if you change mics - be sure to change this :)
+RATE = 48000 #if you change mics - be sure to change this :)
 CHUNK = int(RATE / 10)  # 100ms
 
-credential_path = "/home/pi/audio-111.json" #replace with your file name!
+credential_path = "/home/pi/DET-2019.json" #replace with your file name!
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=credential_path
 
 client = speech.SpeechClient()
 
 pygame.init()
 pygame.mixer.init()
+
+#Some boolean values to control state
+ACTIVE = False #cabinet is conversing
+ALERT = False # dosage alert
+REPORT = False #save response
+
+
 
 def play_audio(file_path):
     pygame.mixer.init()
@@ -42,23 +49,51 @@ def play_audio(file_path):
         pygame.time.Clock().tick(10)
 
 
-class Medicine(object):
-	def __init__(name, qty, dose, last_dose=Null):
-		self._name = name
-		self._qty = qty
-		self._dose = dose
-		self._last_dose = last_dose
+def wake():
+    global ACTIVE 
+    ACTIVE = True
+    play_audio('greeting.mp3')
+    check_meds()
 
-	def take_med(self):
-		if(self._qty-self.dose>=0):
-			message = 'Please take ' + dose + ' of ' + name
-		    t2s = gTTS(message, lang ='en-UK')
-            t2s.save('dose_prompt.mp3')
-            play_audio('dose_prompt.mp3')
-            if(self._qty==0): 
-            	reorder_prompt(self)
-		else:
-			reorder_prompt(self)
+def check_meds():
+    currDT = datetime.datetime.now()
+    for med in med_list:
+        if med.hour <= currDT.hour:
+            global ALERT 
+            ALERT = True
+    if ALERT = True:
+        for med in med_list:
+            med.med_alert()
+    return
+
+
+class Medicine(object):
+    def __init__(self, name, dosage, hour, location)
+        self.name = name
+        self.dosage = dosage
+        self.hour = hour
+        self.location = location
+        self.taken = False
+
+        def med_alert():
+            currDT = datetime.datetime.now()
+            alert_msg = 'Take ' + self.dosage + ' of your ' + self.name 
+            loc_msg = 'They are locatated on ' + self.location + ' and are marked by the green LED lights.'
+            if currDT-self.hour == 0:
+                msg = alert_msg +'. '+ loc_msg
+            else:
+                msg = alert_msg + " before " +str(self.hour) + " O'clock" + loc_msg
+            t2s = gTTS(msg, lang='en-uk')
+            t2s.save('med_alert.mp3')
+            play_audio('med_alert.mp3') 
+            return
+
+
+
+
+
+
+
 #MicrophoneStream() is brought in from Google Cloud Platform
 class MicrophoneStream(object):
     """Opens a recording stream as a generator yielding the audio chunks."""
@@ -181,14 +216,32 @@ def listen_print_loop(responses):
             # Exit recognition if any of the transcribed phrases could be
             # one of our keywords.
             num_chars_printed = 0
+
+def decide_action(transcript):
+    if re.search('hello', transcript, re.I):
+        wake()
+    else:
+        return
 def main():
+
+    med_1 = Medicine("Adderal", "2 pills", 23, "center of the top shelf") 
+    med_list = {med_1}
     
     #setting up the GTTS responses as .mp3 files!
-    t2s = gTTS('You are the fairest of them all!', lang ='en')
-    t2s.save('fairest.mp3')
-    t2s = gTTS('You didnt tell me what to do with that.', lang='en')
-    t2s.save('idontknow.mp3')
-    
+    t2s = gTTS('Hello, Robby', lang ='en-UK')
+    t2s.save('greeting.mp3')
+    t2s = gTTS('Ok!', lang ='en-UK')
+    t2s.save('ok.mp3')
+    t2s = gTTS('"Ok, is there anything else I can help you with?"', lang='en-UK')
+    t2s.save('help.mp3')
+    t2s = gTTS('My records indicate that you have already taken your prescriptions for the day. Would you like to take an additional dose?', lang='en-UK')
+    t2s.save('no_meds.mp3')
+    t2s = gTTs('Great. How are you feeling?', lang='en-UK')
+    t2s.save('feelings.mp3')
+    t2s = gTTs('Have you finished taking your medications?', lang='en-UK')
+    t2s.save('finished.mp3')
+    t2s = gTTs('Let me know when you are done.', lang='en-UK')
+    t2s.save('done.mp3')
     # See http://g.co/cloud/speech/docs/languages
     # for a list of supported languages.
     # this code comes from Google Cloud's Speech to Text API!
